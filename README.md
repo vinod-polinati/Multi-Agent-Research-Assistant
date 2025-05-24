@@ -18,8 +18,8 @@ An autonomous research assistant that finds, reads, and summarizes scientific pa
 ## Setup
 
 ```bash
-git clone https://github.com/your-username/ai-research-copilot.git
-cd ai-research-copilot
+git clone https://github.com/vinod-polinati/ai-research-agent.git
+cd ai-research-agent
 pip install -r requirements.txt
 pip install sentence-transformers "numpy<2.0.0"
 ```
