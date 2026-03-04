@@ -95,11 +95,22 @@ Synthesizer -->|"final report accessible via API"| API
 | Layer      | Technology                         |
 | ---------- | ---------------------------------- |
 | Backend    | Python, FastAPI, LangGraph         |
+| Resilience | Tenacity (retries), SlowAPI (rate limits) |
+| Testing    | Pytest, Pytest-Asyncio             |
 | LLMs       | Groq (Llama 3.3 70B via free tier) |
 | Web Search | Tavily API (free tier)             |
 | Papers     | ArXiv API + PyMuPDF                |
 | Frontend   | Vanilla HTML + CSS + SSE           |
 | Storage    | SQLite                             |
+
+---
+
+## Features & Resilience
+
+- **Relevant Academic Research:** Strict semantic and arXiv-category filtering prevents irrelevant papers (like astronomy or computer vision) from polluting LLM reports.
+- **Auto-Retries:** Transient failures with Groq, Tavily, or ArXiv APIs are automatically retried via `tenacity` with exponential backoff.
+- **Security & Scale:** Built-in `slowapi` rate limiting (10 req/min/IP), strict maximum concurrency constraints, and user input sanitization to stop prompt injections.
+- **Robust Orchestration:** LangGraph state machine ensures data is properly passed through `supervisor → web_researcher → paper_reader → critic → synthesizer` loops, intelligently determining if a topic needs deeper follow-up research. 
 
 ---
 
