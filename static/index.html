@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent Research Assistant</title>
+    <meta name="description"
+        content="AI-powered research assistant using multiple agents to search the web, read academic papers, and produce comprehensive reports.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+    <div class="app">
+        <!-- ── Header ──────────────────────────────────────────── -->
+        <header class="header">
+            <div class="header__brand">
+                <div class="header__icon">🔬</div>
+                <div>
+                    <h1 class="header__title">Research Assistant</h1>
+                    <p class="header__subtitle">Multi-Agent · Groq · LangGraph</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- ── Input Section ───────────────────────────────────── -->
+        <section id="input-section" class="section input-section">
+            <div class="input-card glass-card">
+                <h2 class="input-card__title">What would you like to research?</h2>
+                <div class="input-group">
+                    <input type="text" id="topic-input" class="input-field"
+                        placeholder="e.g. Recent advances in quantum computing error correction" autocomplete="off">
+                </div>
+                <div class="controls">
+                    <div class="depth-toggle" id="depth-toggle">
+                        <button class="depth-btn active" data-depth="quick" id="btn-quick">
+                            ⚡ Quick
+                        </button>
+                        <button class="depth-btn" data-depth="deep" id="btn-deep">
+                            🔬 Deep
+                        </button>
+                    </div>
+                    <button id="start-btn" class="primary-btn">
+                        Start Research
+                        <span class="btn-arrow">→</span>
+                    </button>
+                </div>
+                <p class="depth-hint" id="depth-hint">
+                    Quick mode skips quality review for faster results (~2 min)
+                </p>
+            </div>
+        </section>
+
+        <!-- ── Progress Section (hidden initially) ─────────────── -->
+        <section id="progress-section" class="section progress-section hidden">
+            <div class="progress-card glass-card">
+                <div class="progress-header">
+                    <h2 id="progress-topic" class="progress-topic">Researching...</h2>
+                    <span id="progress-badge" class="badge">planning</span>
+                </div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                </div>
+                <p id="progress-message" class="progress-message">Initializing agents...</p>
+
+                <!-- Agent pipeline visualization -->
+                <div class="pipeline" id="pipeline">
+                    <div class="pipeline-node" data-agent="supervisor">
+                        <span class="pipeline-icon">🧠</span>
+                        <span class="pipeline-label">Supervisor</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-node" data-agent="web_researcher">
+                        <span class="pipeline-icon">🔍</span>
+                        <span class="pipeline-label">Web Search</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-node" data-agent="paper_reader">
+                        <span class="pipeline-icon">📄</span>
+                        <span class="pipeline-label">Papers</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-node" data-agent="critic">
+                        <span class="pipeline-icon">🔎</span>
+                        <span class="pipeline-label">Critic</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-node" data-agent="synthesizer">
+                        <span class="pipeline-icon">✍️</span>
+                        <span class="pipeline-label">Synthesizer</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Report Section (hidden initially) ───────────────── -->
+        <section id="report-section" class="section report-section hidden">
+            <div class="report-header">
+                <div class="report-meta" id="report-meta"></div>
+                <div class="report-actions">
+                    <button id="download-btn" class="secondary-btn">
+                        📥 Download .md
+                    </button>
+                    <button id="new-research-btn" class="secondary-btn">
+                        🔬 New Research
+                    </button>
+                </div>
+            </div>
+            <div class="report-card glass-card">
+                <div id="report-content" class="report-content markdown-body"></div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // ── State ─────────────────────────────────────────────────────
+        let currentJobId = null;
+        let currentDepth = 'quick';
+        let eventSource = null;
+
+        // ── Elements ──────────────────────────────────────────────────
+        const $ = (sel) => document.querySelector(sel);
+        const inputSection = $('#input-section');
+        const progressSection = $('#progress-section');
+        const reportSection = $('#report-section');
+        const topicInput = $('#topic-input');
+        const startBtn = $('#start-btn');
+        const depthHint = $('#depth-hint');
+        const progressBar = $('#progress-bar');
+        const progressMessage = $('#progress-message');
+        const progressBadge = $('#progress-badge');
+        const progressTopic = $('#progress-topic');
+        const reportContent = $('#report-content');
+        const reportMeta = $('#report-meta');
+        const downloadBtn = $('#download-btn');
+        const newResearchBtn = $('#new-research-btn');
+
+        // ── Depth toggle ──────────────────────────────────────────────
+        document.querySelectorAll('.depth-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.depth-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentDepth = btn.dataset.depth;
+                depthHint.textContent = currentDepth === 'quick'
+                    ? 'Quick mode skips quality review for faster results (~2 min)'
+                    : 'Deep mode includes critic review and may loop for higher quality (~5 min)';
+            });
+        });
+
+        // ── Start research ────────────────────────────────────────────
+        startBtn.addEventListener('click', startResearch);
+        topicInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') startResearch();
+        });
+
+        async function startResearch() {
+            const topic = topicInput.value.trim();
+            if (!topic) {
+                topicInput.classList.add('shake');
+                setTimeout(() => topicInput.classList.remove('shake'), 600);
+                return;
+            }
+
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<span class="spinner"></span> Starting...';
+
+            try {
+                const res = await fetch('/research', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic, depth: currentDepth }),
+                });
+                const data = await res.json();
+                currentJobId = data.job_id;
+
+                // Show progress
+                inputSection.classList.add('hidden');
+                progressSection.classList.remove('hidden');
+                progressTopic.textContent = topic;
+                resetPipeline();
+
+                // Connect SSE
+                connectSSE(currentJobId);
+            } catch (err) {
+                alert('Failed to start research: ' + err.message);
+            } finally {
+                startBtn.disabled = false;
+                startBtn.innerHTML = 'Start Research <span class="btn-arrow">→</span>';
+            }
+        }
+
+        // ── SSE streaming ─────────────────────────────────────────────
+        function connectSSE(jobId) {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource(`/research/${jobId}/stream`);
+
+            eventSource.addEventListener('status', (e) => {
+                const data = JSON.parse(e.data);
+                updateProgress(data);
+
+                if (data.status === 'done') {
+                    eventSource.close();
+                    fetchReport(jobId);
+                } else if (data.status === 'failed') {
+                    eventSource.close();
+                    progressMessage.textContent = data.message;
+                    progressBadge.textContent = 'failed';
+                    progressBadge.className = 'badge badge--error';
+                }
+            });
+
+            eventSource.onerror = () => {
+                // SSE disconnected, try to fetch report anyway
+                setTimeout(() => fetchReport(jobId), 2000);
+            };
+        }
+
+        function updateProgress(data) {
+            progressBar.style.width = `${data.progress}%`;
+            progressMessage.textContent = data.message;
+            progressBadge.textContent = data.status;
+
+            // Highlight active pipeline node
+            if (data.node) {
+                document.querySelectorAll('.pipeline-node').forEach(n => {
+                    const agent = n.dataset.agent;
+                    if (agent === data.node) {
+                        n.classList.add('active');
+                        n.classList.remove('completed');
+                    } else if (n.classList.contains('active')) {
+                        n.classList.remove('active');
+                        n.classList.add('completed');
+                    }
+                });
+            }
+        }
+
+        function resetPipeline() {
+            document.querySelectorAll('.pipeline-node').forEach(n => {
+                n.classList.remove('active', 'completed');
+            });
+            progressBar.style.width = '0%';
+            progressBadge.className = 'badge';
+        }
+
+        // ── Fetch report ──────────────────────────────────────────────
+        async function fetchReport(jobId) {
+            try {
+                const res = await fetch(`/research/${jobId}/report`);
+                if (res.status === 202) {
+                    // Still in progress, retry
+                    setTimeout(() => fetchReport(jobId), 3000);
+                    return;
+                }
+                const data = await res.json();
+                showReport(data);
+            } catch (err) {
+                progressMessage.textContent = '❌ Failed to retrieve report';
+            }
+        }
+
+        function showReport(data) {
+            progressSection.classList.add('hidden');
+            reportSection.classList.remove('hidden');
+
+            reportContent.innerHTML = renderMarkdown(data.markdown);
+
+            const meta = data.metadata;
+            const duration = meta.duration_seconds
+                ? `${Math.round(meta.duration_seconds)}s`
+                : 'N/A';
+            reportMeta.innerHTML = `
+                <span class="meta-chip">📊 ${meta.sources_count} sources</span>
+                <span class="meta-chip">🔄 ${meta.iterations} iteration${meta.iterations > 1 ? 's' : ''}</span>
+                <span class="meta-chip">⏱️ ${duration}</span>
+                <span class="meta-chip">${meta.depth === 'deep' ? '🔬 Deep' : '⚡ Quick'}</span>
+            `;
+        }
+
+        // ── Simple markdown renderer ──────────────────────────────────
+        function renderMarkdown(md) {
+            if (!md) return '<p>No report content.</p>';
+            return md
+                // Headers
+                .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                // Bold & italic
+                .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                // Links
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+                // Unordered lists
+                .replace(/^\s*[-*] (.*$)/gm, '<li>$1</li>')
+                // Inline code
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                // Horizontal rules
+                .replace(/^---$/gm, '<hr>')
+                // Paragraphs
+                .replace(/\n\n/g, '</p><p>')
+                // Wrap in paragraphs
+                .replace(/^(?!<[hluop]|<li|<hr)/gm, '')
+                + '';
+        }
+
+        // ── Download ──────────────────────────────────────────────────
+        downloadBtn.addEventListener('click', async () => {
+            if (!currentJobId) return;
+            try {
+                const res = await fetch(`/research/${currentJobId}/export`, { method: 'POST' });
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `report_${currentJobId.slice(0, 8)}.md`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (err) {
+                alert('Download failed: ' + err.message);
+            }
+        });
+
+        // ── New research ──────────────────────────────────────────────
+        newResearchBtn.addEventListener('click', () => {
+            reportSection.classList.add('hidden');
+            inputSection.classList.remove('hidden');
+            topicInput.value = '';
+            topicInput.focus();
+            currentJobId = null;
+        });
+    </script>
+</body>
+
+</html>

@@ -1,65 +1,168 @@
-# 🧠 AI Research Copilot
+# 🔬 Multi-Agent Research Assistant
 
-An autonomous research assistant that finds, reads, and summarizes scientific papers from arXiv — so you can focus on insights, not information overload.
+A multi-agent AI system that autonomously researches any topic using web search, academic papers, and LLM-powered synthesis — all orchestrated by [LangGraph](https://github.com/langchain-ai/langgraph).
 
----
-
-## Features
-
-* 🔍 Search arXiv based on your research goal
-* 🧠 Analyze abstracts or full papers
-* 📚 Build a local knowledge base using embeddings
-* ✍️ Summarize findings into clear overviews
-* 🤖 Multi-agent workflow powered by LangGraph
-* ⚡ Runs on Groq’s fast, free Llama 3 8B API
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)
+![LangGraph](https://img.shields.io/badge/LangGraph-0.2-purple)
 
 ---
 
-## Setup
+## Architecture
+```mermaid
+graph TB
+%% === STYLES ===
+classDef core fill:#1E90FF,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
+classDef db fill:#9ACD32,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
+classDef external fill:#FFD700,stroke:#000,color:#000,stroke-width:2px,rx:10px,ry:10px;
 
-```bash
-git clone https://github.com/vinod-polinati/ai-research-agent.git
-cd ai-research-agent
-pip install -r requirements.txt
-pip install sentence-transformers "numpy<2.0.0"
+%% === USERS ===
+User(("User<br/>Submits Research Topic"))
+
+%% === WEB API CONTAINER ===
+subgraph "Web API Container"
+  API["FastAPI Application<br/>main.py"]:::core
+  DB["SQLite Database<br/>research.db"]:::db
+end
+
+User -->|"submits topic via REST API"| API
+API -->|"creates job"| DB
+API -->|"launches background task"| ResearchPipeline
+
+%% === ORCHESTRATION CONTAINER ===
+subgraph "Orchestration Container"
+  Graph["StateGraph<br/>graph.py"]:::core
+  Supervisor["Supervisor Node<br/>Generates Sub-Questions"]:::core
+  WebResearcher["Web Researcher Node<br/>Uses Tavily API"]:::core
+  PaperReader["Paper Reader Node<br/>Uses arXiv API"]:::core
+  Critic["Critic Node<br/>Evaluates Research"]:::core
+  Synthesizer["Synthesizer Node<br/>Generates Final Report"]:::core
+end
+
+ResearchPipeline -->|"executes graph"| Graph
+Graph -->|"initializes state"| Supervisor
+Supervisor -->|"triggers web search"| WebResearcher
+WebResearcher -->|"appends results"| ResearchState
+Supervisor -->|"triggers paper reading"| PaperReader
+PaperReader -->|"appends summaries"| ResearchState
+Supervisor -->|"triggers critique"| Critic
+Critic -->|"generates follow-up queries"| Supervisor
+Supervisor -->|"triggers report synthesis"| Synthesizer
+Synthesizer -->|"stores report"| DB
+
+%% === AGENTS ===
+subgraph "Agent Modules"
+  SupervisorAgent["Supervisor Agent<br/>agents/supervisor.py"]:::core
+  WebResearcherAgent["Web Researcher Agent<br/>agents/web_researcher.py"]:::core
+  PaperReaderAgent["Paper Reader Agent<br/>agents/paper_reader.py"]:::core
+  CriticAgent["Critic Agent<br/>agents/critic.py"]:::core
+  SynthesizerAgent["Synthesizer Agent<br/>agents/synthesizer.py"]:::core
+end
+
+Supervisor -->|"uses"| SupervisorAgent
+WebResearcher -->|"uses"| WebResearcherAgent
+PaperReader -->|"uses"| PaperReaderAgent
+Critic -->|"uses"| CriticAgent
+Synthesizer -->|"uses"| SynthesizerAgent
+
+%% === STATE MANAGEMENT ===
+subgraph "State Management"
+  State["ResearchState<br/>state.py"]:::core
+end
+
+Graph -->|"updates shared state"| State
+
+%% === EXTERNAL INTEGRATIONS ===
+subgraph "External Integrations"
+  Tavily["Tavily API<br/>Web Search"]:::external
+  ArXiv["arXiv API<br/>Academic Papers"]:::external
+end
+
+WebResearcherAgent -->|"searches via"| Tavily
+PaperReaderAgent -->|"fetches papers via"| ArXiv
+
+%% === DATA FLOW ===
+User -->|"receives report"| API
+API -->|"streams progress updates"| User
+Synthesizer -->|"final report accessible via API"| API
 ```
-
-Create a `.env` file:
-
-```
-GROQ_API_KEY=your_groq_api_key
-```
-
----
-
-## Usage
-
-```python
-from research_copilot import ResearchCopilot
-
-copilot = ResearchCopilot()  # or specify model="llama3-8b-8192"
-
-results = copilot.research(
-    research_goal="Your research question here",
-    max_papers=5,
-    include_full_text=False
-)
-
-if 'findings' in results.get('findings', {}):
-    for paper in results['findings']['findings']:
-        print(paper['title'])
-
-if 'summary' in results.get('summary', {}):
-    print("\nSummary:")
-    print(results['summary']['summary'])
-```
+**Quick mode** (`⚡`) skips the Critic and goes straight to the Synthesizer.
 
 ---
 
 ## Tech Stack
 
-* **Groq (Llama 3 8B)** for inference
-* **ChromaDB + Sentence Transformers** for local embeddings
-* **LangGraph** for orchestrating agent workflows
+| Layer      | Technology                         |
+| ---------- | ---------------------------------- |
+| Backend    | Python, FastAPI, LangGraph         |
+| LLMs       | Groq (Llama 3.3 70B via free tier) |
+| Web Search | Tavily API (free tier)             |
+| Papers     | ArXiv API + PyMuPDF                |
+| Frontend   | Vanilla HTML + CSS + SSE           |
+| Storage    | SQLite                             |
 
 ---
+
+## Setup
+
+### 1. Clone & enter the project
+
+```bash
+git clone <repo-url>
+cd multiagent-research
+```
+
+### 2. Create a virtual environment
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure API keys
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your keys:
+
+| Key              | Where to get it                                         |
+| ---------------- | ------------------------------------------------------- |
+| `GROQ_API_KEY`   | [console.groq.com](https://console.groq.com) → API Keys |
+| `TAVILY_API_KEY` | [tavily.com](https://tavily.com) → Dashboard → API Keys |
+
+### 5. Run
+
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+Open **http://localhost:8000** in your browser.
+
+---
+
+## API Endpoints
+
+| Method | Endpoint                    | Description                        |
+| ------ | --------------------------- | ---------------------------------- |
+| POST   | `/research`                 | Start a research job               |
+| GET    | `/research/{job_id}/stream` | SSE event stream for live progress |
+| GET    | `/research/{job_id}/report` | Retrieve completed report          |
+| POST   | `/research/{job_id}/export` | Download report as `.md` file      |
+
+---
+
+## v2 Roadmap
+
+- [ ] Parallel agent execution via LangGraph `Send` API
+- [ ] Vector store caching for previously researched topics
+- [ ] Citation quality scoring
+- [ ] User-configurable agent parameters
+- [ ] Docker deployment
