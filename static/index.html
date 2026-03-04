@@ -118,10 +118,17 @@
     </div>
 
     <script>
-        // ── State ─────────────────────────────────────────────────────
         let currentJobId = null;
         let currentDepth = 'quick';
         let eventSource = null;
+
+        // ── API Configuration ─────────────────────────────────────────
+        // When deployed to Vercel, the frontend needs to know where the Render backend is.
+        // If served from localhost (FastAPI static files), use relative path.
+        // Otherwise, inject the Render URL here (e.g. 'https://my-backend.onrender.com')
+        const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? ''
+            : 'https://YOUR_RENDER_URL.onrender.com'; // ⚠️ UPDATE THIS LINE FOR PRODUCTION
 
         // ── Elements ──────────────────────────────────────────────────
         const $ = (sel) => document.querySelector(sel);
@@ -170,7 +177,7 @@
             startBtn.innerHTML = '<span class="spinner"></span> Starting...';
 
             try {
-                const res = await fetch('/research', {
+                const res = await fetch(`${API_BASE}/research`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic, depth: currentDepth }),
@@ -197,7 +204,7 @@
         // ── SSE streaming ─────────────────────────────────────────────
         function connectSSE(jobId) {
             if (eventSource) eventSource.close();
-            eventSource = new EventSource(`/research/${jobId}/stream`);
+            eventSource = new EventSource(`${API_BASE}/research/${jobId}/stream`);
 
             eventSource.addEventListener('status', (e) => {
                 const data = JSON.parse(e.data);
@@ -251,7 +258,7 @@
         // ── Fetch report ──────────────────────────────────────────────
         async function fetchReport(jobId) {
             try {
-                const res = await fetch(`/research/${jobId}/report`);
+                const res = await fetch(`${API_BASE}/research/${jobId}/report`);
                 if (res.status === 202) {
                     // Still in progress, retry
                     setTimeout(() => fetchReport(jobId), 3000);
@@ -313,7 +320,7 @@
         downloadBtn.addEventListener('click', async () => {
             if (!currentJobId) return;
             try {
-                const res = await fetch(`/research/${currentJobId}/export`, { method: 'POST' });
+                const res = await fetch(`${API_BASE}/research/${currentJobId}/export`, { method: 'POST' });
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');

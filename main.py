@@ -57,11 +57,23 @@ async def lifespan(app: FastAPI):
     yield
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(
     title="Multi-Agent Research Assistant",
     version="2.0.0",
     lifespan=lifespan,
 )
+
+# Allow cross-origin requests from Vercel frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # For production, replace "*" with your Vercel URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.state.limiter = limiter
 
 
