@@ -277,8 +277,7 @@ python -m pytest tests/ -v
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for a complete guide to deploying the frontend on **Vercel** and the backend on **Render**.
-
+Deployed live on : https://researchlabai.vercel.app/
 ---
 
 ## Roadmap
